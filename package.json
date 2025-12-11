@@ -1,7 +1,7 @@
 {
   "name": "corrente-do-bem-api",
   "version": "1.0.0",
-  "description": "API inteligente de busca por categorias do Mercado Livre",
+  "description": "API inteligente de busca por categorias",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -9,12 +9,10 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "fuse.js": "^7.0.0",
-    "leven": "^3.1.0",
-    "node-fetch": "^3.3.2"
+    "cors": "^2.8.5",
+    "fast-levenshtein": "^3.0.0"
   },
   "engines": {
     "node": ">=18"
-  },
-  "packageManager": "npm@10.0.0"
+  }
 }
