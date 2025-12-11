@@ -2,7 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const levenshtein = require("fast-levenshtein");
-const nlp = require("wink-nlp-utils");
 
 const app = express();
 app.use(cors());
