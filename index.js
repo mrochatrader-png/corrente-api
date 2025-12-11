@@ -4,95 +4,92 @@ const fs = require("fs");
 const levenshtein = require("fast-levenshtein");
 
 const app = express();
+
+// ==== Habilitar CORS para permitir requisição externa do Wix ====
 app.use(cors());
+
 app.use(express.json());
 
-// Carregar categorias
-const categorias = JSON.parse(fs.readFileSync("categorias.json", "utf8"));
+const PORT = process.env.PORT || 3000;
 
-// ----- SINÔNIMOS (podemos expandir depois) -----
-const sinonimos = {
-  "comida": ["ração", "alimento", "comestível"],
-  "papagaio": ["ave", "pássaro", "aves"],
-  "carro": ["automóvel", "veículo"],
-  "moto": ["motocicleta"],
-  "celular": ["smartphone", "telefone"],
-  "roupa": ["vestuário"],
-  "banco": ["assento", "cadeira", "estofado"],
-  "geladeira": ["refrigerador"],
-  "tv": ["televisão", "televisor"],
-};
+// ==== CARREGAR CATEGORIAS NO FORMATO PLANO ====
+let categorias = [];
+try {
+  const data = fs.readFileSync("categorias.json", "utf8");
+  const obj = JSON.parse(data);
 
-// ----- FUNÇÃO DE EXPANSÃO DE PALAVRAS -----
-function expandirPalavras(query) {
-  let palavras = query.toLowerCase().split(" ");
-  let expandidas = [...palavras];
-
-  palavras.forEach((p) => {
-    if (sinonimos[p]) {
-      expandidas.push(...sinonimos[p]);
+  for (const cat in obj) {
+    const subArray = [];
+    for (const sub in obj[cat]) {
+      subArray.push({ nome: sub, url: obj[cat][sub] });
     }
-  });
-
-  return expandidas;
-}
-
-// ----- FUNÇÃO DE SIMILARIDADE LEVENSHTEIN -----
-function similaridade(a, b) {
-  const dist = levenshtein.get(a.toLowerCase(), b.toLowerCase());
-  const maxLen = Math.max(a.length, b.length);
-  return 1 - dist / maxLen;
-}
-
-// ----- BUSCA INTELIGENTE -----
-app.get("/buscar", (req, res) => {
-  let termo = req.query.q;
-
-  if (!termo) {
-    return res.json({ erro: "Use ?q=busca" });
+    categorias.push({ categoria: cat, subcategorias: subArray });
   }
 
-  const palavras = expandirPalavras(termo);
+  console.log("Categorias carregadas:", categorias.length);
 
-  let melhorResultado = null;
-  let melhorPontuacao = 0;
+} catch (err) {
+  console.error("Erro ao carregar categorias.json:", err);
+}
 
-  categorias.forEach((item) => {
-    const categoria = item.categoria.toLowerCase();
-    const sub = item.subcategoria.toLowerCase();
+// ==== ROTA DE TESTE DE CORS ====
+app.get("/cors-test", (req, res) => {
+  res.json({ status: "ok" });
+});
 
-    palavras.forEach((p) => {
-      // 1. Fuzzy por categoria
-      let score1 = similaridade(p, categoria);
-      if (score1 > melhorPontuacao) {
-        melhorPontuacao = score1;
-        melhorResultado = item;
-      }
+// ==== ROTA DE BUSCA COM IA ====
+app.get("/search", (req, res) => {
+  const termo = (req.query.q || "").trim().toLowerCase();
+  if (!termo) {
+    return res.json([]);
+  }
 
-      // 2. Fuzzy por subcategoria
-      let score2 = similaridade(p, sub);
-      if (score2 > melhorPontuacao) {
-        melhorPontuacao = score2;
-        melhorResultado = item;
+  const palavras = termo.split(" ");
+
+  let resultados = [];
+
+  categorias.forEach(cat => {
+    cat.subcategorias.forEach(sub => {
+      const combined = (cat.categoria + " " + sub.nome).toLowerCase();
+
+      let score = 0;
+      palavras.forEach(p => {
+        if (combined.includes(p)) {
+          score += 1;
+        }
+      });
+
+      const dist = levenshtein.get(combined, termo);
+      const normalized = 1 - dist / Math.max(combined.length, termo.length);
+
+      const finalScore = Math.max(score, normalized);
+
+      if (finalScore > 0) {
+        resultados.push({
+          categoria: cat.categoria,
+          subcategoria: sub.nome,
+          url: sub.url,
+          score: finalScore
+        });
       }
     });
   });
 
-  if (!melhorResultado) {
-    return res.json({ erro: "Nenhuma correspondência encontrada" });
-  }
+  resultados.sort((a, b) => b.score - a.score);
 
-  // Retorna exatamente o link da tabela
-  return res.json({
-    categoria: melhorResultado.categoria,
-    subcategoria: melhorResultado.subcategoria,
-    link: melhorResultado.link,
-    confianca: melhorPontuacao,
-  });
+  res.json(resultados.slice(0, 15));
 });
 
-// ----- INICIAR SERVIDOR -----
-const PORT = process.env.PORT || 3000;
+// ==== ROTA DE CATEGORIAS ====
+app.get("/categories", (req, res) => {
+  res.json(categorias);
+});
+
+// ==== ROTA RAIZ ====
+app.get("/", (req, res) => {
+  res.send("API Corrente do Bem está funcionando!");
+});
+
 app.listen(PORT, () => {
   console.log(`API rodando na porta ${PORT}`);
 });
